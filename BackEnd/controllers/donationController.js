@@ -149,7 +149,7 @@ const updateDonation = async (req, res) => {
     const updated = await Donation.findByIdAndUpdate(
       req.params.id,
       updates,
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     res.json(updated);

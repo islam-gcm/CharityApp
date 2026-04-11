@@ -32,7 +32,7 @@ const claimDonation = async (req, res) => {
         remainingQty: { $gte: requestedQuantity }
       },
       { $inc: { remainingQty: -requestedQuantity } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!donation) {
@@ -135,7 +135,7 @@ const updateClaimStatus = async (req, res) => {
     const claim = await Transaction.findByIdAndUpdate(
       req.params.id,
       { status },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     if (!claim) {
