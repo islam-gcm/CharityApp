@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { emailRegex } = require("../middlewares/emailMiddleware");
 const { isAuthenticated, isAuthorized } = require("../middlewares/authMiddleware");
+const { createNotification } = require("./notificationController");
 
 const allowedRoles = ["donor", "charity"];
 
@@ -127,4 +128,66 @@ const updateProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, me, updateProfile, isAuthenticated, isAuthorized };
+const getCharities = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = { role: "charity" };
+
+    if (status && ["pending", "approved", "rejected"].includes(status)) {
+      filter.status = status;
+    }
+
+    const charities = await User.find(filter)
+      .select("-password")
+      .sort({ createdAt: -1 });
+
+    res.json(charities);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const updateCharityStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!["approved", "rejected", "pending"].includes(status)) {
+      return res.status(400).json({ message: "Invalid charity status" });
+    }
+
+    const charity = await User.findOneAndUpdate(
+      { _id: req.params.id, role: "charity" },
+      { status },
+      { returnDocument: "after", runValidators: true }
+    ).select("-password");
+
+    if (!charity) {
+      return res.status(404).json({ message: "Charity not found" });
+    }
+
+    if (status === "approved" || status === "rejected") {
+      await createNotification(
+        charity._id,
+        status === "approved" ? "charity_approved" : "charity_rejected",
+        status === "approved"
+          ? "Your charity account has been approved"
+          : "Your charity account has been rejected"
+      );
+    }
+
+    res.json(charity);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  me,
+  updateProfile,
+  getCharities,
+  updateCharityStatus,
+  isAuthenticated,
+  isAuthorized
+};

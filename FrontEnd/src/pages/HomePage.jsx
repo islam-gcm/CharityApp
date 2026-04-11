@@ -1,0 +1,54 @@
+import { Link } from 'react-router-dom'
+import Button from '../components/Button.jsx'
+import { useAuth } from '../hooks/useAuth.js'
+
+function HomePage() {
+  const { user } = useAuth()
+
+  return (
+    <section className="hero-section">
+      <div className="hero-copy">
+        <p className="eyebrow">Donor and charity management system</p>
+        <h1>Post donations, discover available goods, and keep every claim accountable.</h1>
+        <p>
+          Donors manage donation posts with live remaining quantities. Charities browse, filter,
+          and claim what they need without over-claiming stock.
+        </p>
+        <div className="hero-actions">
+          <Link className="btn btn-primary" to="/posts">
+            Browse donations
+          </Link>
+          {user ? (
+            <Link className="btn btn-secondary" to="/dashboard">
+              Open dashboard
+            </Link>
+          ) : (
+            <Link className="btn btn-secondary" to="/register">
+              Create account
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="hero-panel">
+        <div>
+          <strong>JWT</strong>
+          <span>Role-based access</span>
+        </div>
+        <div>
+          <strong>Live Qty</strong>
+          <span>Claim updates Logic</span>
+        </div>
+        <div>
+          <strong>REST</strong>
+          <span>MERN API connection</span>
+        </div>
+        <Button variant="ghost" type="button">
+          2025 - 2026
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+export default HomePage

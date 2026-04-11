@@ -1,14 +1,18 @@
 const Donation = require("../models/Donation");
 const Transaction = require("../models/Transaction");
 
-const allowedDonationTypes = ["food", "clothes", "toys", "electronics", "books", "medicines", "other", "others"];
-const allowedUpdateFields = ["donationType", "quantity", "description", "contactPhone", "contactEmail"];
+const allowedDonationTypes = Donation.allowedDonationTypes;
+const allowedUpdateFields = ["name", "donationType", "quantity", "description", "contactPhone", "contactEmail"];
 
 const validateDonationInput = (body, isUpdate = false) => {
-  const { donationType, quantity, contactEmail } = body;
+  const { name, donationType, quantity, contactEmail } = body;
 
-  if (!isUpdate && (!donationType || quantity === undefined)) {
-    return "Donation type and quantity are required";
+  if (!isUpdate && (!name || !donationType || quantity === undefined)) {
+    return "Donation name, type, and quantity are required";
+  }
+
+  if (name !== undefined && String(name).trim().length === 0) {
+    return "Donation name is required";
   }
 
   if (donationType && !allowedDonationTypes.includes(donationType)) {
@@ -57,8 +61,8 @@ const getDonations = async (req, res) => {
     const sortOptions = {
       newest: { createdAt: -1 },
       oldest: { createdAt: 1 },
-      "a-z": { description: 1 },
-      "z-a": { description: -1 },
+      "a-z": { name: 1 },
+      "z-a": { name: -1 },
       quantity: { remainingQty: -1 }
     };
 
@@ -67,12 +71,21 @@ const getDonations = async (req, res) => {
     }
 
     if(search){
-      filter.description = { $regex: search, $options: "i" }; //i bch mtwlich case sensitive, regexhya term
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } }
+      ]; //i bch mtwlich case sensitive, regexhya term
     }
 
-    const donations = await Donation.find(filter)
+    const query = Donation.find(filter)
       .populate("donor", "name email")
       .sort(sortOptions[sort] || sortOptions.newest); //hna bch tkon by default newest first
+
+    if (sort === "a-z" || sort === "z-a") {
+      query.collation({ locale: "en", strength: 2 });
+    }
+
+    const donations = await query;
 
     res.json(donations); //reponse tkon de type json
   } catch (err) {

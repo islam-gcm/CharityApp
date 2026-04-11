@@ -1,14 +1,36 @@
 const mongoose= require('mongoose')
 
+const allowedDonationTypes = [
+    'food',
+    'clothes',
+    'toys',
+    'electronics',
+    'books',
+    'medicines',
+    'furniture',
+    'school_supplies',
+    'hygiene',
+    'baby_items',
+    'household',
+    'other',
+    'others',
+]
+
 const donationSchema = new mongoose.Schema({
     donor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
     },
+    name: {
+        type: String,
+        trim: true,
+        required: [true, 'Donation name is required'],
+        maxlength: [120, 'Donation name cannot exceed 120 characters'],
+    },
     donationType: {
         type: String,
-        enum: ['food', 'clothes', 'toys', 'electronics', 'books', 'medicines', 'other', 'others'],
+        enum: allowedDonationTypes,
         required: true,
     },
     quantity: {
@@ -47,3 +69,4 @@ const donationSchema = new mongoose.Schema({
 })
 
 module.exports = mongoose.model('Donation', donationSchema, 'donations')
+module.exports.allowedDonationTypes = allowedDonationTypes
