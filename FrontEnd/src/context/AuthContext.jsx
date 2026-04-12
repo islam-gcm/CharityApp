@@ -27,7 +27,11 @@ export function AuthProvider({ children }) {
       const { data } = await api.get('/auth/me')
       persistSession(data, null)
       return data
-    } catch {
+    } catch (err) {
+      if (err?.response?.status === 429 || err?.response?.status >= 500) {
+        return user
+      }
+
       // If the JWT expired or was changed server-side, clear the stale browser session.
       sessionStorage.removeItem('donation_token')
       sessionStorage.removeItem('donation_user')
@@ -36,7 +40,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [persistSession])
+  }, [persistSession, user])
 
   useEffect(() => {
     refreshMe()
@@ -46,7 +50,7 @@ export function AuthProvider({ children }) {
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshMe()
     }
-    const intervalId = window.setInterval(refreshMe, 6000)
+    const intervalId = window.setInterval(refreshMe, 60000)
 
     window.addEventListener('focus', refreshMe)
     document.addEventListener('visibilitychange', refreshWhenVisible)

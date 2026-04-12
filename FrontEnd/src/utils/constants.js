@@ -22,3 +22,5 @@ export const sortOptions = [
 ]
 
 export const charityStatuses = ['pending', 'approved', 'rejected']
+
+export const claimStatuses = ['pending', 'confirmed', 'rejected']

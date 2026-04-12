@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import api, { getErrorMessage } from '../services/api.js'
 
-export function useNotifications(pollMs = 7000) {
+export function useNotifications(pollMs = 30000) {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

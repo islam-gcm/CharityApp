@@ -5,7 +5,7 @@ import { useNotifications } from '../hooks/useNotifications.js'
 
 function Navbar() {
   const { user, logout } = useAuth()
-  const { unreadCount } = useNotifications(user ? 7000 : 0)
+  const { unreadCount } = useNotifications(user ? 30000 : 0)
 
   return (
     <header className="navbar">
