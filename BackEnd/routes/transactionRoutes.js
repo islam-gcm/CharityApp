@@ -27,6 +27,13 @@ router.post(
 );
 
 router.get(
+  "/",
+  isAuthenticated,
+  isAuthorized(["admin"]),
+  transactionController.getAllClaims
+);
+
+router.get(
   "/my",
   isAuthenticated,
   isAuthorized(["charity"]),

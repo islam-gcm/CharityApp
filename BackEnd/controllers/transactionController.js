@@ -67,11 +67,17 @@ const claimDonation = async (req, res) => {
       notes: notes || ""
     });
 
+    const charityName = req.user.organization || req.user.name || "A charity";
+    const donationName = donation.name || "your donation";
+    const remainingMessage = donation.remainingQty === 0
+      ? "The donation is now completed."
+      : `${donation.remainingQty} units remain.`;
+
     // notify donor (success)
     await createNotification(
       donation.donor,
       "donation_claimed",
-      "Your donation has been claimed by a charity"
+      `${charityName} claimed ${requestedQuantity} units from "${donationName}". ${remainingMessage}`
     );
 
     // ki tkon claimed bien ndiro response bli jazt
@@ -89,6 +95,26 @@ const getMyClaims = async (req, res) => {
   try {
     const claims = await Transaction.find({ charity: req.user.id })
       .populate("donation")
+      .sort({ createdAt: -1 });
+
+    res.json(claims);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const getAllClaims = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+
+    if (status && ["pending", "confirmed", "rejected"].includes(status)) {
+      filter.status = status;
+    }
+
+    const claims = await Transaction.find(filter)
+      .populate("donation")
+      .populate("charity", "name email organization")
       .sort({ createdAt: -1 });
 
     res.json(claims);
@@ -132,15 +158,54 @@ const updateClaimStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid claim status" });
     }
 
-    const claim = await Transaction.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { returnDocument: "after", runValidators: true }
-    );
+    const claim = await Transaction.findById(req.params.id).populate("donation");
 
     if (!claim) {
       return res.status(404).json({ message: "Claim not found" });
     }
+
+    if (claim.status === status) {
+      return res.json(claim);
+    }
+
+    if (claim.status !== "rejected" && status === "rejected") {
+      const restoredDonation = await Donation.findByIdAndUpdate(
+        claim.donation._id,
+        {
+          $inc: { remainingQty: claim.quantity },
+          status: "available"
+        },
+        { returnDocument: "after", runValidators: true }
+      );
+
+      if (!restoredDonation) {
+        return res.status(404).json({ message: "Donation not found" });
+      }
+    }
+
+    if (claim.status === "rejected" && status !== "rejected") {
+      const reservedDonation = await Donation.findOneAndUpdate(
+        {
+          _id: claim.donation._id,
+          status: "available",
+          remainingQty: { $gte: claim.quantity }
+        },
+        { $inc: { remainingQty: -claim.quantity } },
+        { returnDocument: "after", runValidators: true }
+      );
+
+      if (!reservedDonation) {
+        return res.status(400).json({ message: "Not enough quantity available to restore this claim" });
+      }
+
+      if (reservedDonation.remainingQty === 0) {
+        reservedDonation.status = "completed";
+        await reservedDonation.save();
+      }
+    }
+
+    claim.status = status;
+    await claim.save();
 
     res.json(claim);
   } catch (err) {
@@ -148,4 +213,4 @@ const updateClaimStatus = async (req, res) => {
   }
 };
 
-module.exports = { claimDonation, getMyClaims, getClaimById, updateClaimStatus };
+module.exports = { claimDonation, getMyClaims, getAllClaims, getClaimById, updateClaimStatus };
