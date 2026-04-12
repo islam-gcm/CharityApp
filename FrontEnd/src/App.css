@@ -157,7 +157,7 @@
 }
 
 .hero-section {
-  display: grid;
+  display: flex;
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
   gap: 32px;
   align-items: stretch;
@@ -367,6 +367,14 @@
 .status-rejected {
   color: var(--danger);
   background: var(--error-bg);
+}
+
+.status-display {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 120px;
+  margin-right: 20px;
 }
 
 .quantity-line {

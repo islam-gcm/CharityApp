@@ -29,24 +29,6 @@ function HomePage() {
           )}
         </div>
       </div>
-
-      <div className="hero-panel">
-        <div>
-          <strong>JWT</strong>
-          <span>Role-based access</span>
-        </div>
-        <div>
-          <strong>Live Qty</strong>
-          <span>Claim updates Logic</span>
-        </div>
-        <div>
-          <strong>REST</strong>
-          <span>MERN API connection</span>
-        </div>
-        <Button variant="ghost" type="button">
-          2025 - 2026
-        </Button>
-      </div>
     </section>
   )
 }

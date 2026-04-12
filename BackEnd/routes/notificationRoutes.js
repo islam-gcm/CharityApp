@@ -2,20 +2,13 @@ const express = require("express");
 const router = express.Router();
 const { isAuthenticated } = require("../middlewares/authMiddleware");
 const notificationController = require("../controllers/notificationController");
-const { apiLimiter } = require("../middlewares/rateLimiterMiddleware");
+const { notificationLimiter } = require("../middlewares/rateLimiterMiddleware");
 
-router.use(apiLimiter);
+router.get("/", notificationLimiter, isAuthenticated, notificationController.getNotifications);
 
-
-// njibo notifs ll logedIn users (GET)
-router.get("/", isAuthenticated, notificationController.getNotifications);
-
-
-// read notification (UPDATE=PATCH)
 router.patch("/:id/read", isAuthenticated, notificationController.markNotificationAsRead);
 
 
-// nfasiw notif (DELETE)
 router.delete("/:id", isAuthenticated, notificationController.deleteNotification);
 
 

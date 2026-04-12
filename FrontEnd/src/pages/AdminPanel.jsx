@@ -7,6 +7,15 @@ import api, { getErrorMessage } from '../services/api.js'
 import { charityStatuses, claimStatuses } from '../utils/constants.js'
 import { formatDate, titleCase } from '../utils/formatters.js'
 
+function StatusDisplay({ status }) {
+  return (
+    <div className="status-display" aria-label={`Current status: ${titleCase(status)}`}>
+      <span>Current status</span>
+      <strong className={`status status-${status}`}>{titleCase(status)}</strong>
+    </div>
+  )
+}
+
 function AdminPanel() {
   const [activeTab, setActiveTab] = useState('charities')
   const [charities, setCharities] = useState([])
@@ -113,7 +122,7 @@ function AdminPanel() {
 
       <Alert type="success">{message}</Alert>
       <Alert type="error">{error}</Alert>
-      {loading ? <Spinner label="Loading charities" /> : null}
+      {loading ? <Spinner label={activeTab === 'charities' ? 'Loading charities' : 'Loading claims'} /> : null}
 
       {activeTab === 'charities' ? (
         <>
@@ -135,16 +144,16 @@ function AdminPanel() {
                   <p>Registration: {charity.registrationNumber || 'Not provided'}</p>
                   <small>Joined {formatDate(charity.createdAt)}</small>
                 </div>
-                <span className={`status status-${charity.status}`}>{charity.status}</span>
-                <div className="card-actions">
+                <StatusDisplay status={charity.status} />
+                <div className="admin-actions" aria-label="Change charity status">
                   <Button variant="secondary" disabled={savingId === charity._id} onClick={() => updateStatus(charity._id, 'approved')}>
-                    Approve
+                    Set approved
                   </Button>
                   <Button variant="danger" disabled={savingId === charity._id} onClick={() => updateStatus(charity._id, 'rejected')}>
-                    Reject
+                    Set rejected
                   </Button>
                   <Button variant="ghost" disabled={savingId === charity._id} onClick={() => updateStatus(charity._id, 'pending')}>
-                    Pending
+                    Set pending
                   </Button>
                 </div>
               </article>
@@ -173,16 +182,16 @@ function AdminPanel() {
                   <p>Remaining now: {claim.donation?.remainingQty ?? 'Unknown'} / {claim.donation?.quantity ?? 'Unknown'}</p>
                   <small>Claimed {formatDate(claim.createdAt)}</small>
                 </div>
-                <span className={`status status-${claim.status}`}>{claim.status}</span>
-                <div className="card-actions">
+                <StatusDisplay status={claim.status} />
+                <div className="admin-actions" aria-label="Change claim status">
                   <Button variant="secondary" disabled={savingId === claim._id} onClick={() => updateClaimStatus(claim._id, 'confirmed')}>
-                    Confirm
+                    Set confirmed
                   </Button>
                   <Button variant="danger" disabled={savingId === claim._id} onClick={() => updateClaimStatus(claim._id, 'rejected')}>
-                    Reject
+                    Set rejected
                   </Button>
                   <Button variant="ghost" disabled={savingId === claim._id} onClick={() => updateClaimStatus(claim._id, 'pending')}>
-                    Pending
+                    Set pending
                   </Button>
                 </div>
               </article>
