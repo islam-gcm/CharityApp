@@ -18,7 +18,7 @@ function NotificationsPage() {
   const markAllRead = async () => {
     const unread = notifications.filter((notification) => !notification.isRead)
 
-    await Promise.all(unread.map((notification) => markRead(notification._id)))
+    await Promise.all(unread.map((notification) => markRead(notification._id, { reloadAfter: false })))
     reload()
   }
 

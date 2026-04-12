@@ -28,8 +28,8 @@ export function AuthProvider({ children }) {
       persistSession(data, null)
       return data
     } catch (err) {
-      if (err?.response?.status === 429 || err?.response?.status >= 500) {
-        return user
+      if (err?.response?.status === 429 || err?.response?.status >= 500) { 
+        return null 
       }
 
       // If the JWT expired or was changed server-side, clear the stale browser session.
@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [persistSession, user])
+  }, [persistSession])
 
   useEffect(() => {
     refreshMe()

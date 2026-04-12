@@ -51,10 +51,10 @@ export function useNotifications(pollMs = 30000) {
     }
   }, [loadNotifications, pollMs])
 
-  const markRead = async (id) => {
+  const markRead = async (id, { reloadAfter = true } = {}) => {
     // Notification actions mirror notificationRoutes: read uses PATCH, delete uses DELETE.
     await api.patch(`/notifications/${id}/read`)
-    loadNotifications()
+    if (reloadAfter) loadNotifications()
   }
 
   const removeNotification = async (id) => {
