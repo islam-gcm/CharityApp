@@ -30,11 +30,6 @@ function HomePage() {
         </div>
       </div>
       <HeroShowcase />
-      <div className="home-strip" aria-label="Platform highlights">
-        <span>Live donation stock</span>
-        <span>Verified charity claims</span>
-        <span>Donor-owned updates</span>
-      </div>
     </section>
   )
 }
