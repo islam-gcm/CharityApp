@@ -1,0 +1,917 @@
+openapi: 3.0.3
+info:
+  title: Donation Platform API
+  version: 1.0.0
+  description: |
+    This API handles the core functionality of the Donation Management Platform.  
+    It allows users to register, authenticate, and interact with donation posts.
+
+    Donors can create and manage donation entries, while charities can browse,
+    filter, and claim available donations. The system ensures proper tracking of
+    quantities to prevent over-claiming and maintains clear communication between users.
+
+    Authentication is handled using JSON Web Tokens (JWT), and access to certain
+    endpoints is restricted based on user roles (donor, charity, admin).
+
+    This documentation provides details on all available endpoints, request formats,
+    and expected responses.
+    TODO: Confirm exact success status codes where the documentation only says "Success response".
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local development server
+tags:
+  - name: Authentication
+  - name: Admin
+    description: "Admin-only operations. Admin test account example from the seed/database: Islam Gacem, islam@gmail.com."
+  - name: Donations
+  - name: Claims
+  - name: Notifications
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register
+      description: Creates a donor or charity account. Donors are approved immediately; charities start as pending.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/RegisterDonorRequest'
+                - $ref: '#/components/schemas/RegisterCharityRequest'
+            examples:
+              donor:
+                value: {name: Adem, email: adem@gmail.com, password: "12345678", phone: "0555000001", role: donor}
+              charity:
+                value: {name: Haithem, email: haithem@gmail.com, password: aaaaaaaa, phone: "0555000003", role: charity, organization: KhirCharity, registrationNumber: KHR2026001}
+      responses:
+        "201":
+          description: "User created. TODO: Confirm exact status code."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+              example: {_id: USER_ID, name: Adem, email: adem@gmail.com, phone: "0555000001", role: donor, status: approved, createdAt: "2026-04-12T20:00:00.000Z", updatedAt: "2026-04-12T20:00:00.000Z"}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "409": {$ref: '#/components/responses/Conflict'}
+        "429": {$ref: '#/components/responses/AuthRateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login
+      description: Logs in a user and returns a JWT token.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+            examples:
+              admin:
+                summary: Admin test account
+                value: {email: islam@gmail.com, password: "12345678"}
+              donor:
+                summary: Donor test account
+                value: {email: adem@gmail.com, password: "12345678"}
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginResponse'}
+              examples:
+                admin:
+                  summary: Admin login response
+                  value: {user: {_id: ADMIN_USER_ID, name: Islam Gacem, email: islam@gmail.com, role: admin, status: approved}, token: JWT_TOKEN}
+                donor:
+                  summary: Donor login response
+                  value: {user: {_id: USER_ID, name: Adem, email: adem@gmail.com, phone: "0555000001", role: donor, status: approved}, token: JWT_TOKEN}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/AuthRateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      operationId: getCurrentUser
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Current user returned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CurrentUser'}
+              example: {id: USER_ID, role: donor, name: Adem, email: adem@gmail.com, status: approved}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /auth/profile:
+    put:
+      tags: [Authentication]
+      summary: Update profile
+      description: Updates name, phone, organization, or registrationNumber for the logged-in user.
+      operationId: updateProfile
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateProfileRequest'}
+            example: {name: Adem, phone: "0555111122"}
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+              example: {_id: USER_ID, name: Adem, email: adem@gmail.com, phone: "0555111122", role: donor, status: approved}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /auth/charities:
+    get:
+      tags: [Admin]
+      summary: Get charities
+      description: Returns charity accounts. Admin only.
+      operationId: getCharities
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/CharityStatusQuery'}
+      responses:
+        "200":
+          description: Charity accounts returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/CharityUser'}}
+              example: [{_id: CHARITY_USER_ID, name: Haithem, email: haithem@gmail.com, phone: "0555000003", role: charity, organization: KhirCharity, registrationNumber: KHR2026001, status: pending}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /auth/charities/{id}/status:
+    put:
+      tags: [Admin]
+      summary: Update charity status
+      description: Approves, rejects, or resets a charity account to pending. Approved or rejected charities receive a notification.
+      operationId: updateCharityStatus
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateCharityStatusRequest'}
+            example: {status: approved}
+      responses:
+        "200":
+          description: Charity status updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CharityUser'}
+              example: {_id: CHARITY_USER_ID, name: Haithem, email: haithem@gmail.com, role: charity, organization: KhirCharity, registrationNumber: KHR2026001, status: approved}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /posts:
+    get:
+      tags: [Donations]
+      summary: Get available donations
+      description: Returns available donations. Public route.
+      operationId: getAvailableDonations
+      parameters:
+        - {$ref: '#/components/parameters/DonationTypeQuery'}
+        - {$ref: '#/components/parameters/SearchQuery'}
+        - {$ref: '#/components/parameters/DonationSortQuery'}
+      responses:
+        "200":
+          description: Donations returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/DonationListItem'}}
+              example: [{_id: DONATION_ID, donor: {_id: DONOR_ID, name: Adem, email: adem@gmail.com}, name: Rice bags, donationType: food, quantity: 20, remainingQty: 20, description: Clean rice bags ready for pickup., status: available, contactPhone: "0555000001", contactEmail: adem@gmail.com}]
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+    post:
+      tags: [Donations]
+      summary: Create donation
+      description: Creates a donation. Donor only.
+      operationId: createDonation
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDonationRequest'}
+            example: {name: School notebooks, donationType: school_supplies, quantity: 40, description: New notebooks for children., contactPhone: "0555000001", contactEmail: adem@gmail.com}
+      responses:
+        "201":
+          description: "Donation created. TODO: Confirm exact status code."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Donation'}
+              example: {_id: DONATION_ID, donor: DONOR_ID, name: School notebooks, donationType: school_supplies, quantity: 40, remainingQty: 40, description: New notebooks for children., status: available, contactPhone: "0555000001", contactEmail: adem@gmail.com}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /posts/my:
+    get:
+      tags: [Donations]
+      summary: Get my donations
+      description: Returns donations created by the logged-in donor.
+      operationId: getMyDonations
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Donor donations returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Donation'}}
+              example: [{_id: DONATION_ID, donor: DONOR_ID, name: Winter clothes, donationType: clothes, quantity: 12, remainingQty: 12, description: Jackets and sweaters in good condition., status: available}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /posts/{id}:
+    get:
+      tags: [Donations]
+      summary: Get one donation
+      operationId: getDonationById
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Donation returned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DonationDetail'}
+              example: {_id: DONATION_ID, donor: {_id: DONOR_ID, name: Adem, email: adem@gmail.com, phone: "0555000001"}, name: Rice bags, donationType: food, quantity: 20, remainingQty: 20, description: Clean rice bags ready for pickup., status: available, contactPhone: "0555000001", contactEmail: adem@gmail.com}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+    put:
+      tags: [Donations]
+      summary: Update donation
+      description: Updates a donation created by the logged-in donor. Cannot be edited after any quantity has been claimed.
+      operationId: updateDonation
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateDonationRequest'}
+            example: {name: School notebooks and pens, quantity: 50, description: New notebooks and blue pens.}
+      responses:
+        "200":
+          description: Donation updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Donation'}
+              example: {_id: DONATION_ID, donor: DONOR_ID, name: School notebooks and pens, donationType: school_supplies, quantity: 50, remainingQty: 50, description: New notebooks and blue pens., status: available}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+    delete:
+      tags: [Donations]
+      summary: Delete donation
+      description: Deletes a donation created by the logged-in donor. Cannot be deleted after claims have started.
+      operationId: deleteDonation
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Donation deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MessageResponse'}
+              example: {message: Donation deleted successfully}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /posts/{id}/claims:
+    get:
+      tags: [Donations]
+      summary: Get claims for my donation
+      description: Returns claims made on one of the donor's donations.
+      operationId: getClaimsForMyDonation
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Claims for donation returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/DonationClaim'}}
+              example: [{_id: CLAIM_ID, donation: DONATION_ID, charity: {_id: CHARITY_USER_ID, name: Haithem, email: haithem@gmail.com, organization: KhirCharity}, quantity: 5, status: pending, notes: We can pick this up tomorrow.}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /claims:
+    post:
+      tags: [Claims]
+      summary: Claim a donation
+      description: Creates a claim for part or all of a donation. Approved charity required.
+      operationId: createClaim
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/CreateClaim'}
+      responses:
+        "201": {$ref: '#/components/responses/ClaimCreated'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+    get:
+      tags: [Claims]
+      summary: Get all claims
+      description: Returns all claims. Admin only.
+      operationId: getAllClaims
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/ClaimStatusQuery'}
+      responses:
+        "200":
+          description: Claims returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/AdminClaim'}}
+              example: [{_id: CLAIM_ID, donation: {_id: DONATION_ID, name: Rice bags, donationType: food}, charity: {_id: CHARITY_USER_ID, name: Haithem, email: haithem@gmail.com, organization: KhirCharity}, quantity: 5, status: pending, notes: KhirCharity can collect the items this week.}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /claims/claim:
+    post:
+      tags: [Claims]
+      summary: Claim a donation using alternate route
+      description: This route uses the same controller as POST /claims.
+      operationId: createClaimAlternate
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/CreateClaim'}
+      responses:
+        "201": {$ref: '#/components/responses/ClaimCreated'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /claims/my:
+    get:
+      tags: [Claims]
+      summary: Get my claims
+      description: Returns claims created by the logged-in charity.
+      operationId: getMyClaims
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Charity claims returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/MyClaim'}}
+              example: [{_id: CLAIM_ID, donation: {_id: DONATION_ID, name: Rice bags, donationType: food}, charity: CHARITY_USER_ID, quantity: 5, status: pending, notes: KhirCharity can collect the items this week.}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /claims/{id}:
+    get:
+      tags: [Claims]
+      summary: Get one claim
+      description: Viewable by admins, the charity that created the claim, or the donor who owns the donation.
+      operationId: getClaimById
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Claim returned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ClaimDetail'}
+              example: {_id: CLAIM_ID, donation: {_id: DONATION_ID, name: Rice bags, donor: DONOR_ID}, charity: {_id: CHARITY_USER_ID, name: Haithem, email: haithem@gmail.com, organization: KhirCharity}, quantity: 5, status: pending, notes: KhirCharity can collect the items this week.}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /claims/{id}/status:
+    put:
+      tags: [Claims]
+      summary: Update claim status
+      description: Updates a claim status. Admin only. Rejected claims restore quantity; returning rejected claims to pending or confirmed reserves quantity again.
+      operationId: updateClaimStatus
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateClaimStatusRequest'}
+            example: {status: confirmed}
+      responses:
+        "200":
+          description: Claim status updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UpdatedClaim'}
+              example: {_id: CLAIM_ID, donation: {_id: DONATION_ID, name: Rice bags, donationType: food}, charity: CHARITY_USER_ID, quantity: 5, status: confirmed, notes: KhirCharity can collect the items this week.}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get notifications
+      description: Returns notifications for the logged-in user.
+      operationId: getNotifications
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Notifications returned.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+              example: [{_id: NOTIFICATION_ID, user: USER_ID, type: donation_claimed, message: 'KhirCharity claimed 5 units from "Rice bags". 15 units remain.', isRead: false, createdAt: "2026-04-12T20:30:00.000Z", updatedAt: "2026-04-12T20:30:00.000Z"}]
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark notification as read
+      operationId: markNotificationAsRead
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Notification marked as read.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MessageResponse'}
+              example: {message: Notification marked as read}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+  /notifications/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete notification
+      operationId: deleteNotification
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdPath'}
+      responses:
+        "200":
+          description: Notification deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MessageResponse'}
+              example: {message: Notification deleted successfully}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "429": {$ref: '#/components/responses/RateLimit'}
+        "500": {$ref: '#/components/responses/ServerError'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token returned by POST /auth/login.
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Resource identifier.
+      schema: {type: string}
+      example: RESOURCE_ID
+    CharityStatusQuery:
+      name: status
+      in: query
+      required: false
+      description: Filter charities by status.
+      schema: {$ref: '#/components/schemas/CharityStatus'}
+      example: pending
+    ClaimStatusQuery:
+      name: status
+      in: query
+      required: false
+      description: Filter claims by status.
+      schema: {$ref: '#/components/schemas/ClaimStatus'}
+      example: pending
+    DonationTypeQuery:
+      name: type
+      in: query
+      required: false
+      description: Filter by donation type.
+      schema: {$ref: '#/components/schemas/DonationType'}
+      example: food
+    SearchQuery:
+      name: search
+      in: query
+      required: false
+      description: Search inside donation name and description.
+      schema: {type: string}
+      example: rice
+    DonationSortQuery:
+      name: sort
+      in: query
+      required: false
+      description: Sort donations.
+      schema: {type: string, enum: [newest, oldest, a-z, z-a, quantity]}
+      example: quantity
+  requestBodies:
+    CreateClaim:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CreateClaimRequest'}
+          example: {donationId: DONATION_ID, quantity: 5, notes: KhirCharity can collect the items this week.}
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples:
+            validation: {value: {message: Invalid request data}}
+            invalidDonationType: {value: {message: Invalid donation type}}
+            invalidStatus: {value: {message: Invalid claim status}}
+    Unauthorized:
+      description: Not authenticated.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples:
+            noToken: {value: {message: No token}}
+            invalidToken: {value: {message: Invalid token}}
+            tokenExpired: {value: {message: Token expired}}
+            userNotFound: {value: {message: User not found}}
+    Forbidden:
+      description: Not authorized.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples:
+            actionNotAuthorized: {value: {message: Action not authorized}}
+            accessDenied: {value: {message: Access denied}}
+            charityNotVerified: {value: {message: Charity not verified yet}}
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {message: Resource not found}
+    Conflict:
+      description: Conflict.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {message: Email already registered}
+    RateLimit:
+      description: Too many requests.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {message: Too many requests, please try again later}
+    AuthRateLimit:
+      description: Too many authentication attempts.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {message: Too many auth attempts, please try again later}
+    ServerError:
+      description: Server error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          example: {message: Server error message}
+    ClaimCreated:
+      description: "Claim created. TODO: Confirm exact status code."
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CreateClaimResponse'}
+          example:
+            message: Donation claimed successfully
+            transaction: {_id: CLAIM_ID, donation: DONATION_ID, charity: CHARITY_USER_ID, quantity: 5, status: pending, claimedAt: "2026-04-12T20:30:00.000Z", notes: KhirCharity can collect the items this week., createdAt: "2026-04-12T20:30:00.000Z", updatedAt: "2026-04-12T20:30:00.000Z"}
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, example: Error message here}
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, example: Operation completed successfully}
+    UserRole:
+      type: string
+      enum: [admin, donor, charity]
+    CharityStatus:
+      type: string
+      enum: [pending, approved, rejected]
+    UserStatus:
+      type: string
+      enum: [pending, approved, rejected]
+    DonationType:
+      type: string
+      enum: [food, clothes, toys, electronics, books, medicines, furniture, school_supplies, hygiene, baby_items, household, other, others]
+    DonationStatus:
+      type: string
+      description: "TODO: Documentation shows available and completed; confirm the full backend enum."
+      enum: [available, completed]
+    ClaimStatus:
+      type: string
+      enum: [pending, confirmed, rejected]
+    NotificationType:
+      type: string
+      enum: [charity_approved, charity_rejected, donation_claimed, donation_failed_insufficient_quantity]
+    RegisterBaseRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: {type: string, example: Adem}
+        email: {type: string, format: email, example: adem@gmail.com}
+        password: {type: string, minLength: 8, format: password, example: "12345678"}
+        phone: {type: string, example: "0555000001"}
+    RegisterDonorRequest:
+      allOf:
+        - {$ref: '#/components/schemas/RegisterBaseRequest'}
+        - type: object
+          required: [role]
+          properties:
+            role: {type: string, enum: [donor], example: donor}
+    RegisterCharityRequest:
+      allOf:
+        - {$ref: '#/components/schemas/RegisterBaseRequest'}
+        - type: object
+          required: [role, organization, registrationNumber]
+          properties:
+            role: {type: string, enum: [charity], example: charity}
+            organization: {type: string, example: KhirCharity}
+            registrationNumber: {type: string, example: KHR2026001}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email, example: adem@gmail.com}
+        password: {type: string, format: password, example: "12345678"}
+    LoginResponse:
+      type: object
+      required: [user, token]
+      properties:
+        user: {$ref: '#/components/schemas/AuthUser'}
+        token: {type: string, example: JWT_TOKEN}
+    AuthUser:
+      type: object
+      required: [_id, name, email, role, status]
+      properties:
+        _id: {type: string, example: USER_ID}
+        name: {type: string, example: Adem}
+        email: {type: string, format: email, example: adem@gmail.com}
+        phone: {type: string, example: "0555000001"}
+        role: {$ref: '#/components/schemas/UserRole'}
+        status: {$ref: '#/components/schemas/UserStatus'}
+    CurrentUser:
+      type: object
+      required: [id, role, name, email, status]
+      properties:
+        id: {type: string, example: USER_ID}
+        role: {$ref: '#/components/schemas/UserRole'}
+        name: {type: string, example: Adem}
+        email: {type: string, format: email, example: adem@gmail.com}
+        status: {$ref: '#/components/schemas/UserStatus'}
+    UpdateProfileRequest:
+      type: object
+      description: At least one allowed profile field should be provided.
+      properties:
+        name: {type: string, example: Adem}
+        phone: {type: string, example: "0555111122"}
+        organization: {type: string, example: KhirCharity}
+        registrationNumber: {type: string, example: KHR2026001}
+    User:
+      type: object
+      required: [_id, name, email, role, status]
+      properties:
+        _id: {type: string, example: USER_ID}
+        name: {type: string, example: Adem}
+        email: {type: string, format: email, example: adem@gmail.com}
+        phone: {type: string, example: "0555000001"}
+        role: {$ref: '#/components/schemas/UserRole'}
+        organization: {type: string, example: KhirCharity}
+        registrationNumber: {type: string, example: KHR2026001}
+        status: {$ref: '#/components/schemas/UserStatus'}
+        createdAt: {type: string, format: date-time, example: "2026-04-12T20:00:00.000Z"}
+        updatedAt: {type: string, format: date-time, example: "2026-04-12T20:00:00.000Z"}
+    CharityUser:
+      allOf:
+        - {$ref: '#/components/schemas/User'}
+        - type: object
+          required: [role, organization, registrationNumber]
+          properties:
+            role: {type: string, enum: [charity]}
+            organization: {type: string, example: KhirCharity}
+            registrationNumber: {type: string, example: KHR2026001}
+            status: {$ref: '#/components/schemas/CharityStatus'}
+    UpdateCharityStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {$ref: '#/components/schemas/CharityStatus'}
+    DonorSummary:
+      type: object
+      required: [_id, name, email]
+      properties:
+        _id: {type: string, example: DONOR_ID}
+        name: {type: string, example: Adem}
+        email: {type: string, format: email, example: adem@gmail.com}
+        phone: {type: string, example: "0555000001"}
+    CharitySummary:
+      type: object
+      required: [_id, name, email, organization]
+      properties:
+        _id: {type: string, example: CHARITY_USER_ID}
+        name: {type: string, example: Haithem}
+        email: {type: string, format: email, example: haithem@gmail.com}
+        organization: {type: string, example: KhirCharity}
+    DonationBase:
+      type: object
+      required: [_id, name, donationType, quantity, remainingQty, status]
+      properties:
+        _id: {type: string, example: DONATION_ID}
+        name: {type: string, example: Rice bags}
+        donationType: {$ref: '#/components/schemas/DonationType'}
+        quantity: {type: integer, minimum: 1, example: 20}
+        remainingQty: {type: integer, minimum: 0, example: 20}
+        description: {type: string, example: Clean rice bags ready for pickup.}
+        status: {$ref: '#/components/schemas/DonationStatus'}
+        contactPhone: {type: string, example: "0555000001"}
+        contactEmail: {type: string, format: email, example: adem@gmail.com}
+    Donation:
+      allOf:
+        - {$ref: '#/components/schemas/DonationBase'}
+        - type: object
+          required: [donor]
+          properties:
+            donor: {type: string, example: DONOR_ID}
+    DonationListItem:
+      allOf:
+        - {$ref: '#/components/schemas/DonationBase'}
+        - type: object
+          required: [donor]
+          properties:
+            donor: {$ref: '#/components/schemas/DonorSummary'}
+    DonationDetail:
+      allOf:
+        - {$ref: '#/components/schemas/DonationBase'}
+        - type: object
+          required: [donor]
+          properties:
+            donor: {$ref: '#/components/schemas/DonorSummary'}
+    CreateDonationRequest:
+      type: object
+      required: [name, donationType, quantity]
+      properties:
+        name: {type: string, example: School notebooks}
+        donationType: {$ref: '#/components/schemas/DonationType'}
+        quantity: {type: integer, minimum: 1, example: 40}
+        description: {type: string, example: New notebooks for children.}
+        contactPhone: {type: string, example: "0555000001"}
+        contactEmail: {type: string, format: email, example: adem@gmail.com}
+    UpdateDonationRequest:
+      type: object
+      description: At least one valid donation field should be provided.
+      properties:
+        name: {type: string, example: School notebooks and pens}
+        donationType: {$ref: '#/components/schemas/DonationType'}
+        quantity: {type: integer, minimum: 1, example: 50}
+        description: {type: string, example: New notebooks and blue pens.}
+        contactPhone: {type: string, example: "0555000001"}
+        contactEmail: {type: string, format: email, example: adem@gmail.com}
+    ClaimDonationSummary:
+      type: object
+      required: [_id, name]
+      properties:
+        _id: {type: string, example: DONATION_ID}
+        name: {type: string, example: Rice bags}
+        donationType: {$ref: '#/components/schemas/DonationType'}
+        donor: {type: string, example: DONOR_ID}
+    ClaimBase:
+      type: object
+      required: [_id, quantity, status]
+      properties:
+        _id: {type: string, example: CLAIM_ID}
+        quantity: {type: integer, minimum: 1, example: 5}
+        status: {$ref: '#/components/schemas/ClaimStatus'}
+        notes: {type: string, example: KhirCharity can collect the items this week.}
+    DonationClaim:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {type: string, example: DONATION_ID}
+            charity: {$ref: '#/components/schemas/CharitySummary'}
+    AdminClaim:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {$ref: '#/components/schemas/ClaimDonationSummary'}
+            charity: {$ref: '#/components/schemas/CharitySummary'}
+    MyClaim:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {$ref: '#/components/schemas/ClaimDonationSummary'}
+            charity: {type: string, example: CHARITY_USER_ID}
+    ClaimDetail:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {$ref: '#/components/schemas/ClaimDonationSummary'}
+            charity: {$ref: '#/components/schemas/CharitySummary'}
+    UpdatedClaim:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {$ref: '#/components/schemas/ClaimDonationSummary'}
+            charity: {type: string, example: CHARITY_USER_ID}
+    CreateClaimRequest:
+      type: object
+      required: [donationId, quantity]
+      properties:
+        donationId: {type: string, example: DONATION_ID}
+        quantity: {type: integer, minimum: 1, example: 5}
+        notes: {type: string, example: KhirCharity can collect the items this week.}
+    ClaimTransaction:
+      allOf:
+        - {$ref: '#/components/schemas/ClaimBase'}
+        - type: object
+          required: [donation, charity]
+          properties:
+            donation: {type: string, example: DONATION_ID}
+            charity: {type: string, example: CHARITY_USER_ID}
+            claimedAt: {type: string, format: date-time, example: "2026-04-12T20:30:00.000Z"}
+            createdAt: {type: string, format: date-time, example: "2026-04-12T20:30:00.000Z"}
+            updatedAt: {type: string, format: date-time, example: "2026-04-12T20:30:00.000Z"}
+    CreateClaimResponse:
+      type: object
+      required: [message, transaction]
+      properties:
+        message: {type: string, example: Donation claimed successfully}
+        transaction: {$ref: '#/components/schemas/ClaimTransaction'}
+    UpdateClaimStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {$ref: '#/components/schemas/ClaimStatus'}
+    Notification:
+      type: object
+      required: [_id, user, type, message, isRead, createdAt, updatedAt]
+      properties:
+        _id: {type: string, example: NOTIFICATION_ID}
+        user: {type: string, example: USER_ID}
+        type: {$ref: '#/components/schemas/NotificationType'}
+        message: {type: string, example: 'KhirCharity claimed 5 units from "Rice bags". 15 units remain.'}
+        isRead: {type: boolean, example: false}
+        createdAt: {type: string, format: date-time, example: "2026-04-12T20:30:00.000Z"}
+        updatedAt: {type: string, format: date-time, example: "2026-04-12T20:30:00.000Z"}
